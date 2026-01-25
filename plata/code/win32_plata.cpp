@@ -33,6 +33,8 @@ extern "C"
 typedef struct Player {
     Vector2 position;
     float speed;
+    float height;
+    float width;
     bool canJump;
 } Player;
 
@@ -78,6 +80,8 @@ int main(void)
     
     Player player = { 0 };
     player.position = { 400, 280 };
+    player.width = (float)playerSprite.width;
+    player.height = (float)playerSprite.height;
     player.speed = 0;
     player.canJump = false;
     
@@ -102,7 +106,6 @@ int main(void)
         
         camera.target = player.position;
         //----------------------------------------------------------------------------------
-        
         // Draw
         //----------------------------------------------------------------------------------
         BeginDrawing();
@@ -183,6 +186,9 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
                 float platformBottom = (float)(obj->y + obj->height);
                 float futureY = player->position.y + player->speed * delta;
                 
+                float playerTop = player->position.y - player->height;
+                float futureTop = futureY - player->height;
+                
                 // Check horizontal bounds
                 if(player->position.x >= obj->x &&
                    player->position.x <= obj->x + obj->width)
@@ -199,11 +205,12 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
                     }
                     
                     // Jumping into ceiling
-                    if(player->position.y >= platformBottom &&
-                       futureY <= platformBottom)
+                    if(player->speed < 0 &&
+                       playerTop >= platformBottom &&
+                       futureTop <= platformBottom)
                     {
                         player->speed = 0.0f;
-                        player->position.y = platformBottom;
+                        player->position.y = platformBottom + player->height;
                         break;
                     }
                 }
