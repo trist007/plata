@@ -18,6 +18,11 @@
 #include "raylib.h"
 #include "raymath.h"
 
+extern "C"
+{
+#include "raytmx.h"
+}
+
 #define G 400
 #define PLAYER_JUMP_SPD 350.0f
 #define PLAYER_HOR_SPD 200.0f
@@ -40,7 +45,8 @@ typedef struct EnvItem {
 //----------------------------------------------------------------------------------
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
-void UpdatePlayer(Player *player, EnvItem *envItems, int envItemsLength, float delta);
+//void UpdatePlayer(Player *player, EnvItem *envItems, int envItemsLength, float delta);
+void UpdatePlayer(Player *player, TmxMap *map, float delta);
 void UpdateCameraCenter(Camera2D *camera, Player *player, EnvItem *envItems, int envItemsLength, float delta, int width, int height);
 void UpdateCameraCenterInsideMap(Camera2D *camera, Player *player, EnvItem *envItems, int envItemsLength, float delta, int width, int height);
 void UpdateCameraCenterSmoothFollow(Camera2D *camera, Player *player, EnvItem *envItems, int envItemsLength, float delta, int width, int height);
@@ -58,18 +64,31 @@ int main(void)
     const int screenHeight = 768;
     
     InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
+    
     Texture2D playerSprite = LoadTexture("plata/code/Sprite-0001.png");
     
     if(playerSprite.id == 0)
     {
         TraceLog(LOG_ERROR, "Failed to load player sprite!");
         TraceLog(LOG_INFO, "Working directory: %s", GetWorkingDirectory());
+        return(1);
+    }
+    
+    
+    // Load tilemap
+    TmxMap* map = LoadTMX("plata/data/plata.tmx");
+    if(map == 0)
+    {
+        TraceLog(LOG_ERROR, "Failed to load TMX \"%s\"", "plata/data/plata.tmx");
+        return(1);
     }
     
     Player player = { 0 };
     player.position = { 400, 280 };
     player.speed = 0;
     player.canJump = false;
+    
+    /*
     EnvItem envItems[] = {
         {{ 0, 0, 1000, 400 }, 0, LIGHTGRAY },
         {{ 0, 400, 1000, 200 }, 1, GRAY },
@@ -79,6 +98,7 @@ int main(void)
     };
     
     int envItemsLength = sizeof(envItems)/sizeof(envItems[0]);
+    */
     
     Camera2D camera = { 0 };
     camera.target = player.position;
@@ -86,6 +106,7 @@ int main(void)
     camera.rotation = 0.0f;
     camera.zoom = 1.0f;
     
+    /*
     // Store pointers to the multiple update camera functions
     void (*cameraUpdaters[])(Camera2D*, Player*, EnvItem*, int, float, int, int) = {
         UpdateCameraCenter,
@@ -105,6 +126,7 @@ int main(void)
         "Follow player center horizontally; update player center vertically after landing",
         "Player push camera on getting too close to screen edge"
     };
+    */
     
     SetTargetFPS(60);
     //--------------------------------------------------------------------------------------
@@ -116,8 +138,12 @@ int main(void)
         //----------------------------------------------------------------------------------
         float deltaTime = GetFrameTime();
         
-        UpdatePlayer(&player, envItems, envItemsLength, deltaTime);
+        //UpdatePlayer(&player, envItems, envItemsLength, deltaTime);
+        UpdatePlayer(&player, map, deltaTime);
         
+        camera.target = player.position;
+        
+        /*
         camera.zoom += ((float)GetMouseWheelMove()*0.05f);
         
         if (camera.zoom > 3.0f) camera.zoom = 3.0f;
@@ -133,6 +159,7 @@ int main(void)
         
         // Call update camera function by its pointer
         cameraUpdaters[cameraOption](&camera, &player, envItems, envItemsLength, deltaTime, screenWidth, screenHeight);
+*/
         //----------------------------------------------------------------------------------
         
         // Draw
@@ -143,7 +170,9 @@ int main(void)
         
         BeginMode2D(camera);
         
-        for (int i = 0; i < envItemsLength; i++) DrawRectangleRec(envItems[i].rect, envItems[i].color);
+        AnimateTMX(map);
+        DrawTMX(map, &camera, 0, 0, 0, WHITE);
+        //for (int i = 0; i < envItemsLength; i++) DrawRectangleRec(envItems[i].rect, envItems[i].color);
         
         DrawTexture(playerSprite,
                     (int)(player.position.x - playerSprite.width / 2),
@@ -158,6 +187,7 @@ int main(void)
         
         EndMode2D();
         
+        /*
         DrawText("Controls:", 20, 20, 10, BLACK);
         DrawText("- Right/Left to move", 40, 40, 10, DARKGRAY);
         DrawText("- Space to jump", 40, 60, 10, DARKGRAY);
@@ -165,6 +195,7 @@ int main(void)
         DrawText("- C to change camera mode", 40, 100, 10, DARKGRAY);
         DrawText("Current camera mode:", 20, 120, 10, BLACK);
         DrawText(cameraDescriptions[cameraOption], 40, 140, 10, DARKGRAY);
+*/
         
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -172,6 +203,7 @@ int main(void)
     
     // De-Initialization
     //--------------------------------------------------------------------------------------
+    UnloadTMX(map);
     UnloadTexture(playerSprite);
     CloseWindow();        // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
@@ -179,6 +211,82 @@ int main(void)
     return 0;
 }
 
+void
+UpdatePlayer(Player *player, TmxMap *map, float delta)
+{
+    
+    if (IsKeyDown(KEY_LEFT)) player->position.x -= PLAYER_HOR_SPD * delta;
+    if (IsKeyDown(KEY_RIGHT)) player->position.x += PLAYER_HOR_SPD * delta;
+    if (IsKeyDown(KEY_SPACE) && player->canJump)
+    {
+        player->speed = -PLAYER_JUMP_SPD;
+        player->canJump = false;
+    }
+    
+    // Find the collision layer
+    TmxLayer *collisionLayer = 0;
+    for(uint32_t i = 0;
+        i < map->layersLength;
+        i++)
+    {
+        if(map->layers[i].type == LAYER_TYPE_OBJECT_GROUP &&
+           TextIsEqual(map->layers[i].name, "Collision"))
+        {
+            collisionLayer = &map->layers[i];
+            break;
+        }
+    }
+    
+    bool hitObstacle = false;
+    
+    if(collisionLayer != NULL)
+    {
+        TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
+        
+        // Check collision with each object in the layer
+        for(uint32_t i = 0;
+            i < objGroup->objectsLength;
+            i++)
+        {
+            TmxObject *obj = &objGroup->objects[i];
+            
+            // Only check for rectangle objects
+            if(obj->type == OBJECT_TYPE_RECTANGLE)
+            {
+                
+                float platformY = (float)obj->y;
+                float futureY = player->position.y + player->speed * delta;
+                
+                if(player->position.x >= obj->x &&
+                   player->position.x <= obj->x + obj->width)
+                {
+                    if(player->speed >= 0 &&
+                       player->position.y <= platformY + 1.0f &&
+                       futureY >= platformY - 1.0f)
+                    {
+                        hitObstacle = true;
+                        player->speed = 0.0f;
+                        player->position.y = platformY;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if(!hitObstacle)
+        {
+            player->position.y += player->speed * delta;
+            player->speed += G * delta;
+            player->canJump = false;
+        }
+        else
+        {
+            player->canJump = true;
+        }
+    }
+}
+
+/*
 void UpdatePlayer(Player *player, EnvItem *envItems, int envItemsLength, float delta)
 {
     if (IsKeyDown(KEY_LEFT)) player->position.x -= PLAYER_HOR_SPD*delta;
@@ -318,3 +426,4 @@ void UpdateCameraPlayerBoundsPush(Camera2D *camera, Player *player, EnvItem *env
     if (player->position.x > bboxWorldMax.x) camera->target.x = bboxWorldMin.x + (player->position.x - bboxWorldMax.x);
     if (player->position.y > bboxWorldMax.y) camera->target.y = bboxWorldMin.y + (player->position.y - bboxWorldMax.y);
 }
+*/
