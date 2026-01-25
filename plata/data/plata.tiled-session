@@ -1,0 +1,41 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "plata.tmx",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "file.lastUsedOpenFilter": "All Files (*)",
+    "fileStates": {
+        "plata.tmx": {
+            "scale": 1.5,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 514.9999999999999,
+                "y": 371.6666666666667
+            }
+        },
+        "tmw_desert_spacing.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        }
+    },
+    "last.imagePath": "C:/Program Files/Tiled/examples",
+    "map.height": 24,
+    "map.lastUsedFormat": "tmx",
+    "map.width": 32,
+    "openFiles": [
+        "plata.tmx",
+        "tmw_desert_spacing.tsx"
+    ],
+    "project": "plata.tiled-project",
+    "recentFiles": [
+        "tmw_desert_spacing.tsx",
+        "plata.tmx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.margin": 1,
+    "tileset.spacing": 1
+}
