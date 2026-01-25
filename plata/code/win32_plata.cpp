@@ -65,7 +65,7 @@ int main(void)
     
     InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
     
-    Texture2D playerSprite = LoadTexture("plata/code/Sprite-0001.png");
+    Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
     
     if(playerSprite.id == 0)
     {
