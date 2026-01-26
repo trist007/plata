@@ -59,6 +59,7 @@ int main(void)
     const int screenHeight = 768;
     
     InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
+    SetWindowPosition(60, 30);
     
     Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
     
