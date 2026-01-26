@@ -104,7 +104,8 @@ int main(void)
         //UpdatePlayer(&player, envItems, envItemsLength, deltaTime);
         UpdatePlayer(&player, map, deltaTime);
         
-        camera.target = player.position;
+        camera.target.x = floorf(player.position.x);
+        camera.target.y = floorf(player.position.y);
         //----------------------------------------------------------------------------------
         // Draw
         //----------------------------------------------------------------------------------
@@ -141,16 +142,6 @@ int main(void)
 void
 UpdatePlayer(Player *player, TmxMap *map, float delta)
 {
-    // NOTE(trist007): delta is to keep the player speed consistent among
-    // different computers running at different fps
-    if (IsKeyDown(KEY_LEFT)) player->position.x -= PLAYER_HOR_SPD * delta;
-    if (IsKeyDown(KEY_RIGHT)) player->position.x += PLAYER_HOR_SPD * delta;
-    if (IsKeyDown(KEY_SPACE) && player->canJump)
-    {
-        player->speed = -PLAYER_JUMP_SPD;
-        player->canJump = false;
-    }
-    
     // Find the collision layer
     TmxLayer *collisionLayer = 0;
     for(uint32_t i = 0;
@@ -165,67 +156,146 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         }
     }
     
-    bool hitObstacle = false;
+    if(collisionLayer == 0) return;
     
-    if(collisionLayer != NULL)
+    TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
+    
+    // Horizontal movement
+    float moveX = 0.0f;
+    if(IsKeyDown(KEY_LEFT)) moveX = -PLAYER_HOR_SPD * delta;
+    if(IsKeyDown(KEY_RIGHT)) moveX = PLAYER_HOR_SPD * delta;
+    
+    float playerLeft = player->position.x - player->width / 2;
+    float playerRight = player->position.x + player->width / 2;
+    float playerTop = player->position.y - player->height;
+    float playerBottom = player->position.y;
+    
+    float futureLeft = playerLeft + moveX;
+    float futureRight = playerRight + moveX;
+    
+    for(uint32_t i = 0;
+        i < objGroup->objectsLength;
+        i++)
     {
-        TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
+        TmxObject *obj = &objGroup->objects[i];
+        if(obj->type != OBJECT_TYPE_RECTANGLE) continue;
         
-        // Check collision with each object in the layer
-        for(uint32_t i = 0;
-            i < objGroup->objectsLength;
-            i++)
+        float wallLeft = (float)obj->x;
+        float wallRight = (float)(obj->x + obj->width);
+        float wallTop = (float)obj->y;
+        float wallBottom = (float)(obj->y + obj->height);
+        
+        // Check if player overlaps vertically with wall
+        if(playerBottom > wallTop && playerTop < wallBottom)
         {
-            TmxObject *obj = &objGroup->objects[i];
-            
-            // Only check for rectangle objects
-            if(obj->type == OBJECT_TYPE_RECTANGLE)
+            // Moving right and hitting wall with playerTop
+            if(moveX > 0 && playerRight <= wallLeft && futureRight >= wallLeft)
             {
-                
-                float platformTop = (float)obj->y;
-                float platformBottom = (float)(obj->y + obj->height);
-                float futureY = player->position.y + player->speed * delta;
-                
-                float playerTop = player->position.y - player->height;
-                float futureTop = futureY - player->height;
-                
-                // Check horizontal bounds
-                if(player->position.x >= obj->x &&
-                   player->position.x <= obj->x + obj->width)
-                {
-                    // Falling onto a platform
-                    if(player->speed >= 0 &&
-                       player->position.y <= platformTop + 1.0f &&
-                       futureY >= platformTop - 1.0f)
-                    {
-                        hitObstacle = true;
-                        player->speed = 0.0f;
-                        player->position.y = platformTop;
-                        break;
-                    }
-                    
-                    // Jumping into ceiling
-                    if(player->speed < 0 &&
-                       playerTop >= platformBottom &&
-                       futureTop <= platformBottom)
-                    {
-                        player->speed = 0.0f;
-                        player->position.y = platformBottom + player->height;
-                        break;
-                    }
-                }
+                player->position.x = wallLeft - player->width / 2;
+                moveX = 0;
+                break;
+            }
+            // Moving left and hitting wall with playerTop
+            if(moveX < 0 && playerLeft >= wallRight && futureLeft <= wallRight)
+            {
+                player->position.x = wallRight + player->width / 2;
+                moveX = 0;
+                break;
+            }
+        }
+    }
+    
+    player->position.x += moveX;
+    
+    // Jumping
+    if(IsKeyDown(KEY_SPACE) && player->canJump)
+    {
+        player->speed = -PLAYER_JUMP_SPD;
+        player->canJump = false;
+    }
+    
+    // Vertical movement
+    bool hitObstacle = false;
+    float futureY = player->position.y + player->speed * delta;
+    
+    // Recalculate player bounds after horizontal movement
+    playerLeft = player->position.x - player->width / 2;
+    playerRight = player->position.x + player->width / 2;
+    playerTop = player->position.y - player->height;
+    playerBottom = player->position.y;
+    
+    for(uint32_t i = 0;
+        i < objGroup->objectsLength;
+        i++)
+    {
+        TmxObject *obj = &objGroup->objects[i];
+        if(obj->type != OBJECT_TYPE_RECTANGLE) continue;
+        
+        float platformLeft = (float)obj->x;
+        float platformRight = (float)(obj->x + obj->width);
+        float platformTop = (float)obj->y;
+        float platformBottom = (float)(obj->y + obj->height);
+        
+        // Check if player overlaps horizontally
+        if(playerRight > platformLeft && playerLeft < platformRight)
+        {
+            // Falling onto platform
+            if(player->speed >= 0 &&
+               playerBottom <= platformTop + 1.0f &&
+               futureY >= platformTop - 1.0f)
+            {
+                hitObstacle = true;
+                player->speed = 0.0f;
+                player->position.y = platformTop;
+                break;
+            }
+            
+            // Jumping into ceiling
+            float futureTop = futureY - player->height;
+            if(player->speed < 0 &&
+               playerTop >= platformBottom &&
+               futureTop <= platformBottom)
+            {
+                player->speed = 0.0f;
+                player->position.y = platformBottom + player->height;
+                break;
             }
         }
         
-        if(!hitObstacle)
+        // NEW: Check if player would be inside wall after vertical movement
+        float futureTop = futureY - player->height;
+        float futureBottom = futureY;
+        
+        if(playerRight > platformLeft && playerLeft < platformRight &&
+           futureBottom > platformTop && futureTop < platformBottom)
         {
-            player->position.y += player->speed * delta;
-            player->speed += G * delta;
-            player->canJump = false;
+            // Player would be inside this wall - push them out horizontally
+            float playerCenterX = player->position.x;
+            float wallCenterX = platformLeft + (platformRight - platformLeft) / 2;
+            
+            if(playerCenterX < wallCenterX)
+            {
+                player->position.x = platformLeft - player->width / 2;
+            }
+            else
+            {
+                player->position.x = platformRight + player->width / 2;
+            }
+            
+            // Recalculate bounds for next iteration
+            playerLeft = player->position.x - player->width / 2;
+            playerRight = player->position.x + player->width / 2;
         }
-        else
-        {
-            player->canJump = true;
-        }
+    }
+    
+    if(!hitObstacle)
+    {
+        player->position.y += player->speed * delta;
+        player->speed += G * delta;
+        player->canJump = false;
+    }
+    else
+    {
+        player->canJump = true;
     }
 }
