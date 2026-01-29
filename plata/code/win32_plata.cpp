@@ -25,7 +25,7 @@ extern "C"
 
 #define G 400
 #define PLAYER_JUMP_SPD 350.0f
-#define PLAYER_HOR_SPD 200.0f
+#define PLAYER_HOR_SPD 300.0f
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
@@ -33,6 +33,7 @@ extern "C"
 typedef struct Player {
     Vector2 position;
     float speed;
+    float velocityX;
     float height;
     float width;
     bool canJump;
@@ -81,6 +82,7 @@ int main(void)
     
     Player player = { 0 };
     player.position = { 400, 280 };
+    player.velocityX = 0.0f;
     player.width = (float)playerSprite.width;
     player.height = (float)playerSprite.height;
     player.speed = 0;
@@ -161,10 +163,44 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     
     TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
     
+    float acceleration = 1200.0f;
+    float deceleration = 800.0f;
+    float max_speed = PLAYER_HOR_SPD;
+    
+    float inputX = 0.0f;
+    if(IsKeyDown(KEY_LEFT)) inputX = -1.0f;
+    if(IsKeyDown(KEY_RIGHT)) inputX = 1.0f;
+    
+    if(inputX != 0.0f)
+    {
+        // Acceleration
+        player->velocityX += inputX * acceleration * delta;
+        
+        // Max speed
+        if(player->velocityX > max_speed) player->velocityX = max_speed;
+        if(player->velocityX < -max_speed) player->velocityX = -max_speed;
+    }
+    else
+    {
+        // Deceleration
+        if(player->velocityX > 0)
+        {
+            player->velocityX -= deceleration * delta;
+            if(player->velocityX < 0) player->velocityX = 0;
+        }
+        else if(player->velocityX < 0)
+        {
+            player->velocityX += deceleration * delta;
+            if(player->velocityX > 0) player->velocityX = 0;
+        }
+    }
+    
+    float moveX = player->velocityX * delta;
+    
     // Horizontal movement
-    float moveX = 0.0f;
-    if(IsKeyDown(KEY_LEFT)) moveX = -PLAYER_HOR_SPD * delta;
-    if(IsKeyDown(KEY_RIGHT)) moveX = PLAYER_HOR_SPD * delta;
+    //float moveX = 0.0f;
+    //if(IsKeyDown(KEY_LEFT)) moveX = -PLAYER_HOR_SPD * delta;
+    //if(IsKeyDown(KEY_RIGHT)) moveX = PLAYER_HOR_SPD * delta;
     
     float playerLeft = player->position.x - player->width / 2;
     float playerRight = player->position.x + player->width / 2;
