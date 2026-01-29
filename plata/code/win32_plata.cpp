@@ -23,7 +23,7 @@ extern "C"
 #include "raytmx.h"
 }
 
-#define G 400
+#define Gravity 400
 #define PLAYER_JUMP_SPD 350.0f
 #define PLAYER_HOR_SPD 300.0f
 
@@ -37,6 +37,7 @@ typedef struct Player {
     float height;
     float width;
     bool canJump;
+    bool inAir;
 } Player;
 
 typedef struct EnvItem {
@@ -87,6 +88,7 @@ int main(void)
     player.height = (float)playerSprite.height;
     player.speed = 0;
     player.canJump = false;
+    player.inAir = false;
     
     Camera2D camera = { 0 };
     camera.target = player.position;
@@ -159,12 +161,17 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         }
     }
     
-    if(collisionLayer == 0) return;
+    if(collisionLayer == 0)
+    {
+        TraceLog(LOG_ERROR, "Could not locate Object Layer");
+        return;
+    }
     
     TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
     
-    float acceleration = 1200.0f;
-    float deceleration = 800.0f;
+    // Movement
+    float acceleration = 1000.0f;
+    float deceleration = 600.0f;
     float max_speed = PLAYER_HOR_SPD;
     
     float inputX = 0.0f;
@@ -197,11 +204,7 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     
     float moveX = player->velocityX * delta;
     
-    // Horizontal movement
-    //float moveX = 0.0f;
-    //if(IsKeyDown(KEY_LEFT)) moveX = -PLAYER_HOR_SPD * delta;
-    //if(IsKeyDown(KEY_RIGHT)) moveX = PLAYER_HOR_SPD * delta;
-    
+    // Player hitbox
     float playerLeft = player->position.x - player->width / 2;
     float playerRight = player->position.x + player->width / 2;
     float playerTop = player->position.y - player->height;
@@ -210,6 +213,7 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     float futureLeft = playerLeft + moveX;
     float futureRight = playerRight + moveX;
     
+    // Collisions
     for(uint32_t i = 0;
         i < objGroup->objectsLength;
         i++)
@@ -249,6 +253,7 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     {
         player->speed = -PLAYER_JUMP_SPD;
         player->canJump = false;
+        player->inAir = true;
     }
     
     // Vertical movement
@@ -323,12 +328,17 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
             playerLeft = player->position.x - player->width / 2;
             playerRight = player->position.x + player->width / 2;
         }
+        
+        // Check if player is in the air
+        if(futureY < platformBottom) player->inAir = true;
+        DrawText(TextFormat("Jumping: %s", player->inAir ? "true" : "false"), 
+                 10, 10, 20, RED);
     }
     
     if(!hitObstacle)
     {
         player->position.y += player->speed * delta;
-        player->speed += G * delta;
+        player->speed += Gravity * delta;
         player->canJump = false;
     }
     else
