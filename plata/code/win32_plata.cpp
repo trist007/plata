@@ -30,6 +30,19 @@ extern "C"
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
+typedef struct animationFrame
+{
+    int currentFrame;
+    int frameCount;
+    float frameTimer;
+    float frameSpeed;
+} animationFrame;
+
+typedef struct Gun
+{
+    float cooldown;;
+} Gun;
+
 typedef struct Player {
     Vector2 position;
     float velocityX;
@@ -40,12 +53,16 @@ typedef struct Player {
     bool canJump;
     bool inAir;
     bool idle;
+    bool gunFiring;
     
-    // Animation
-    int currentFrame;
-    int frameCount;
-    float frameTimer;
-    float frameSpeed;
+    // Running animation
+    animationFrame running;
+    
+    // Gun firing animation
+    animationFrame firing;
+    
+    // Gun parameters
+    Gun gun;
 } Player;
 
 typedef struct EnvItem {
@@ -76,6 +93,8 @@ int main(void)
     Texture2D idle_left = LoadTexture("plata/data/player_idle-left.png");
     Texture2D runSheet_right = LoadTexture("plata/data/player_run-right.png");
     Texture2D runSheet_left = LoadTexture("plata/data/player_run-left.png");
+    Texture2D idle_left_fire = LoadTexture("plata/data/player_idle_left_fire.png");
+    Texture2D idle_right_fire = LoadTexture("plata/data/player_idle_right_fire.png");
     
     if(runSheet_left.id == 0 ||
        runSheet_right.id == 0 ||
@@ -106,11 +125,19 @@ int main(void)
     player.canJump = false;
     player.inAir = false;
     player.idle = true;
+    player.gunFiring = false;
     
-    player.currentFrame = 0;
-    player.frameCount = 8;
-    player.frameTimer = 0.0f;
-    player.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
+    player.running.currentFrame = 0;
+    player.running.frameCount = 8;
+    player.running.frameTimer = 0.0f;
+    player.running.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
+    
+    player.firing.currentFrame = 0;
+    player.firing.frameCount = 4;
+    player.firing.frameTimer = 0.0f;
+    player.firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
+    
+    player.gun.cooldown = 0.2f;
     
     Camera2D camera = { 0 };
     camera.target = player.position;
@@ -145,6 +172,7 @@ int main(void)
         //AnimateTMX(map);
         DrawTMX(map, &camera, 0, 0, 0, WHITE);
         
+        // Player animations
         if(!player.idle)
         {
             float frameWidth = runSheet_right.width / 8;
@@ -152,7 +180,7 @@ int main(void)
             
             Rectangle sourceRec =
             {
-                player.currentFrame * frameWidth, // x position in runSheet
+                player.running.currentFrame * frameWidth, // x position in runSheet
                 0,                                // y position (only one row, so 0)
                 frameWidth,                       // width of one frame
                 frameHeight                       // height of one frame
@@ -193,6 +221,39 @@ int main(void)
             }
         }
         
+        // Shooting gun
+        if(player.gunFiring)
+        {
+            float frameWidth = idle_right_fire.width / 8;
+            float frameHeight = idle_right_fire.height;
+            
+            Rectangle sourceRec =
+            {
+                player.running.currentFrame * frameWidth, // x position in runSheet
+                0,                                // y position (only one row, so 0)
+                frameWidth,                       // width of one frame
+                frameHeight                       // height of one frame
+            };
+            
+            Rectangle destRec =
+            {
+                player.position.x - frameWidth / 2,
+                player.position.y - frameHeight,
+                frameWidth,
+                frameHeight
+            };
+            
+            if(player.facingRight)
+            {
+                DrawTexturePro(idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+            else
+            {
+                DrawTexturePro(idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+            
+        }
+        
         /*
         DrawTexture(playerSprite,
                     (int)(player.position.x - playerSprite.width / 2),
@@ -205,6 +266,8 @@ int main(void)
         DrawText(TextFormat("Jumping: %s", player.inAir ? "true" : "false"), 
                  10, 10, 20, RED);
         
+        DrawText(TextFormat("Firing: %s", player.gunFiring ? "true" : "false"), 
+                 10, 30, 20, RED);
         EndDrawing();
         //----------------------------------------------------------------------------------
     }
@@ -441,17 +504,41 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     if(!player->inAir && player->velocityX != 0)
     {
         player->idle = false;
-        player->frameTimer += delta;
-        if(player->frameTimer >= player->frameSpeed)
+        player->running.frameTimer += delta;
+        if(player->running.frameTimer >= player->running.frameSpeed)
         {
-            player->frameTimer = 0.0f;
-            player->currentFrame++;
+            player->running.frameTimer = 0.0f;
+            player->running.currentFrame++;
             
-            if(player->currentFrame >= player->frameCount) player->currentFrame = 0;
+            if(player->running.currentFrame >= player->running.frameCount) player->running.currentFrame = 0;
         }
     }
     else
     {
         player->idle = true;
+    }
+    
+    // Firing gun
+    if(IsKeyPressed(KEY_BACKSPACE))
+    {
+        player->gunFiring = true;
+        player->firing.currentFrame = 0;
+        
+    }
+    
+    if(player->gunFiring)
+    {
+        player->firing.frameTimer += delta;
+        if(player->firing.frameTimer >= player->firing.frameSpeed)
+        {
+            player->firing.frameTimer = 0.0f;
+            player->firing.currentFrame++;
+            
+            if(player->firing.currentFrame >= player->firing.frameCount)
+            {
+                player->gunFiring = false;
+                player->firing.currentFrame = 0;
+            }
+        }
     }
 }
