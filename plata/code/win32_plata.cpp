@@ -173,9 +173,42 @@ int main(void)
         DrawTMX(map, &camera, 0, 0, 0, WHITE);
         
         // Player animations
-        if(!player.idle)
+        
+        // Shooting gun
+        if(player.gunFiring)
         {
-            float frameWidth = runSheet_right.width / 8;
+            float frameWidth = idle_right_fire.width / player.firing.frameCount;
+            float frameHeight = idle_right_fire.height;
+            
+            Rectangle sourceRec =
+            {
+                player.firing.currentFrame * frameWidth, // x position in runSheet
+                0,                                // y position (only one row, so 0)
+                frameWidth,                       // width of one frame
+                frameHeight                       // height of one frame
+            };
+            
+            Rectangle destRec =
+            {
+                player.position.x - frameWidth / 2,
+                player.position.y - frameHeight,
+                frameWidth,
+                frameHeight
+            };
+            
+            if(player.facingRight)
+            {
+                DrawTexturePro(idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+            else
+            {
+                DrawTexturePro(idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+            
+        }
+        else if(!player.idle)
+        {
+            float frameWidth = runSheet_right.width / player.running.frameCount;
             float frameHeight = runSheet_right.height;
             
             Rectangle sourceRec =
@@ -220,46 +253,6 @@ int main(void)
                             WHITE);
             }
         }
-        
-        // Shooting gun
-        if(player.gunFiring)
-        {
-            float frameWidth = idle_right_fire.width / 8;
-            float frameHeight = idle_right_fire.height;
-            
-            Rectangle sourceRec =
-            {
-                player.running.currentFrame * frameWidth, // x position in runSheet
-                0,                                // y position (only one row, so 0)
-                frameWidth,                       // width of one frame
-                frameHeight                       // height of one frame
-            };
-            
-            Rectangle destRec =
-            {
-                player.position.x - frameWidth / 2,
-                player.position.y - frameHeight,
-                frameWidth,
-                frameHeight
-            };
-            
-            if(player.facingRight)
-            {
-                DrawTexturePro(idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-            else
-            {
-                DrawTexturePro(idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-            
-        }
-        
-        /*
-        DrawTexture(playerSprite,
-                    (int)(player.position.x - playerSprite.width / 2),
-                    (int)(player.position.y - playerSprite.height),
-                    WHITE);
-    */
         
         EndMode2D();
         
