@@ -32,12 +32,20 @@ extern "C"
 //----------------------------------------------------------------------------------
 typedef struct Player {
     Vector2 position;
-    float speed;
     float velocityX;
+    float velocityY;
     float height;
     float width;
+    bool facingRight;
     bool canJump;
     bool inAir;
+    bool idle;
+    
+    // Animation
+    int currentFrame;
+    int frameCount;
+    float frameTimer;
+    float frameSpeed;
 } Player;
 
 typedef struct EnvItem {
@@ -63,12 +71,19 @@ int main(void)
     InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
     SetWindowPosition(60, 30);
     
-    Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
+    //Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
+    Texture2D idle_right = LoadTexture("plata/data/player_idle-right.png");
+    Texture2D idle_left = LoadTexture("plata/data/player_idle-left.png");
+    Texture2D runSheet_right = LoadTexture("plata/data/player_run-right.png");
+    Texture2D runSheet_left = LoadTexture("plata/data/player_run-left.png");
     
-    if(playerSprite.id == 0)
+    if(runSheet_left.id == 0 ||
+       runSheet_right.id == 0 ||
+       idle_left.id == 0 ||
+       idle_right.id == 0)
     {
-        TraceLog(LOG_ERROR, "Failed to load player sprite!");
-        TraceLog(LOG_INFO, "Working directory: %s", GetWorkingDirectory());
+        TraceLog(LOG_ERROR, "Failed to load player sprites!");
+        //TraceLog(LOG_INFO, "Working directory: %s", GetWorkingDirectory());
         return(1);
     }
     
@@ -84,11 +99,18 @@ int main(void)
     Player player = { 0 };
     player.position = { 400, 280 };
     player.velocityX = 0.0f;
-    player.width = (float)playerSprite.width;
-    player.height = (float)playerSprite.height;
-    player.speed = 0;
+    player.velocityY = 0.0f;
+    player.width = (float)idle_right.width;
+    player.height = (float)idle_right.height;
+    player.facingRight = true;
     player.canJump = false;
     player.inAir = false;
+    player.idle = true;
+    
+    player.currentFrame = 0;
+    player.frameCount = 8;
+    player.frameTimer = 0.0f;
+    player.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
     
     Camera2D camera = { 0 };
     camera.target = player.position;
@@ -123,12 +145,65 @@ int main(void)
         //AnimateTMX(map);
         DrawTMX(map, &camera, 0, 0, 0, WHITE);
         
+        if(!player.idle)
+        {
+            float frameWidth = runSheet_right.width / 8;
+            float frameHeight = runSheet_right.height;
+            
+            Rectangle sourceRec =
+            {
+                player.currentFrame * frameWidth, // x position in runSheet
+                0,                                // y position (only one row, so 0)
+                frameWidth,                       // width of one frame
+                frameHeight                       // height of one frame
+            };
+            
+            Rectangle destRec =
+            {
+                player.position.x - frameWidth / 2,
+                player.position.y - frameHeight,
+                frameWidth,
+                frameHeight
+            };
+            
+            if(player.facingRight)
+            {
+                DrawTexturePro(runSheet_right, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+            else
+            {
+                DrawTexturePro(runSheet_left, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            }
+        }
+        else
+        {
+            if(player.facingRight)
+            {
+                DrawTexture(idle_right,
+                            (int)(player.position.x - idle_right.width / 2),
+                            (int)(player.position.y - idle_right.height),
+                            WHITE);
+            }
+            else
+            {
+                DrawTexture(idle_left,
+                            (int)(player.position.x - idle_left.width / 2),
+                            (int)(player.position.y - idle_left.height),
+                            WHITE);
+            }
+        }
+        
+        /*
         DrawTexture(playerSprite,
                     (int)(player.position.x - playerSprite.width / 2),
                     (int)(player.position.y - playerSprite.height),
                     WHITE);
+    */
         
         EndMode2D();
+        
+        DrawText(TextFormat("Jumping: %s", player.inAir ? "true" : "false"), 
+                 10, 10, 20, RED);
         
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -137,7 +212,10 @@ int main(void)
     // De-Initialization
     //--------------------------------------------------------------------------------------
     UnloadTMX(map);
-    UnloadTexture(playerSprite);
+    UnloadTexture(runSheet_right);
+    UnloadTexture(runSheet_left);
+    UnloadTexture(idle_right);
+    UnloadTexture(idle_left);
     CloseWindow();        // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
     
@@ -175,8 +253,16 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     float max_speed = PLAYER_HOR_SPD;
     
     float inputX = 0.0f;
-    if(IsKeyDown(KEY_LEFT)) inputX = -1.0f;
-    if(IsKeyDown(KEY_RIGHT)) inputX = 1.0f;
+    if(IsKeyDown(KEY_LEFT) && !player->inAir)
+    {
+        inputX = -1.0f;
+        player->facingRight = false;
+    }
+    if(IsKeyDown(KEY_RIGHT) && !player->inAir)
+    {
+        inputX = 1.0f;
+        player->facingRight = true;
+    }
     
     if(inputX != 0.0f)
     {
@@ -190,12 +276,12 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     else
     {
         // Deceleration
-        if(player->velocityX > 0)
+        if(player->velocityX > 0 && !player->inAir)
         {
             player->velocityX -= deceleration * delta;
             if(player->velocityX < 0) player->velocityX = 0;
         }
-        else if(player->velocityX < 0)
+        else if(player->velocityX < 0 && !player->inAir)
         {
             player->velocityX += deceleration * delta;
             if(player->velocityX > 0) player->velocityX = 0;
@@ -249,16 +335,21 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     player->position.x += moveX;
     
     // Jumping
-    if(IsKeyDown(KEY_SPACE) && player->canJump)
+    if(IsKeyPressed(KEY_SPACE) && player->canJump)
     {
-        player->speed = -PLAYER_JUMP_SPD;
+        player->velocityY = -PLAYER_JUMP_SPD;
         player->canJump = false;
         player->inAir = true;
     }
     
+    if(IsKeyReleased(KEY_SPACE) && player->velocityY < 0)
+    {
+        player->velocityY *= 0.5f;
+    }
+    
     // Vertical movement
     bool hitObstacle = false;
-    float futureY = player->position.y + player->speed * delta;
+    float futureY = player->position.y + player->velocityY * delta;
     
     // Recalculate player bounds after horizontal movement
     playerLeft = player->position.x - player->width / 2;
@@ -282,23 +373,23 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         if(playerRight > platformLeft && playerLeft < platformRight)
         {
             // Falling onto platform
-            if(player->speed >= 0 &&
+            if(player->velocityY >= 0 &&
                playerBottom <= platformTop + 1.0f &&
                futureY >= platformTop - 1.0f)
             {
                 hitObstacle = true;
-                player->speed = 0.0f;
+                player->velocityY = 0.0f;
                 player->position.y = platformTop;
                 break;
             }
             
             // Jumping into ceiling
             float futureTop = futureY - player->height;
-            if(player->speed < 0 &&
+            if(player->velocityY < 0 &&
                playerTop >= platformBottom &&
                futureTop <= platformBottom)
             {
-                player->speed = 0.0f;
+                player->velocityY = 0.0f;
                 player->position.y = platformBottom + player->height;
                 break;
             }
@@ -331,18 +422,36 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         
         // Check if player is in the air
         if(futureY < platformBottom) player->inAir = true;
-        DrawText(TextFormat("Jumping: %s", player->inAir ? "true" : "false"), 
-                 10, 10, 20, RED);
+        
     }
     
     if(!hitObstacle)
     {
-        player->position.y += player->speed * delta;
-        player->speed += Gravity * delta;
+        player->position.y += player->velocityY * delta;
+        player->velocityY += Gravity * delta;
         player->canJump = false;
     }
     else
     {
         player->canJump = true;
+        player->inAir = false;
+    }
+    
+    // Animation when idle and when running
+    if(!player->inAir && player->velocityX != 0)
+    {
+        player->idle = false;
+        player->frameTimer += delta;
+        if(player->frameTimer >= player->frameSpeed)
+        {
+            player->frameTimer = 0.0f;
+            player->currentFrame++;
+            
+            if(player->currentFrame >= player->frameCount) player->currentFrame = 0;
+        }
+    }
+    else
+    {
+        player->idle = true;
     }
 }
