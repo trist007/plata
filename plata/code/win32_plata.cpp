@@ -40,7 +40,8 @@ typedef struct animationFrame
 
 typedef struct Gun
 {
-    float cooldown;;
+    float coolDown;;
+    Sound gunSound;
 } Gun;
 
 typedef struct Player {
@@ -87,6 +88,8 @@ int main(void)
     
     InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
     SetWindowPosition(60, 30);
+    
+    InitAudioDevice();
     
     //Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
     Texture2D idle_right = LoadTexture("plata/data/player_idle-right.png");
@@ -137,7 +140,8 @@ int main(void)
     player.firing.frameTimer = 0.0f;
     player.firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
     
-    player.gun.cooldown = 0.2f;
+    player.gun.coolDown = 0.2f;
+    player.gun.gunSound = LoadSound("plata/data/sounds/pistol-fire.wav");
     
     Camera2D camera = { 0 };
     camera.target = player.position;
@@ -272,6 +276,8 @@ int main(void)
     UnloadTexture(runSheet_left);
     UnloadTexture(idle_right);
     UnloadTexture(idle_left);
+    UnloadSound(player.gun.gunSound);
+    CloseAudioDevice();
     CloseWindow();        // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
     
@@ -511,16 +517,21 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         player->idle = true;
     }
     
+    player->gun.coolDown -= delta;
+    
     // Firing gun
-    if(IsKeyPressed(KEY_BACKSPACE))
+    if(IsKeyPressed(KEY_BACKSPACE) && player->gun.coolDown <= 0)
     {
         player->gunFiring = true;
         player->firing.currentFrame = 0;
+        PlaySound(player->gun.gunSound);
+        player->gun.coolDown = 0.2f;
         
     }
     
     if(player->gunFiring)
     {
+        
         player->firing.frameTimer += delta;
         if(player->firing.frameTimer >= player->firing.frameSpeed)
         {
