@@ -30,17 +30,28 @@ extern "C"
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
-typedef struct animationFrame
+typedef struct PlayerTextures
+{
+    Texture2D idle_right;
+    Texture2D idle_left;
+    Texture2D run_right;
+    Texture2D run_left;
+    Texture2D idle_right_fire;
+    Texture2D idle_left_fire;
+} PlayerTextures;
+
+typedef struct AnimationFrame
 {
     int currentFrame;
     int frameCount;
     float frameTimer;
     float frameSpeed;
-} animationFrame;
+} AnimationFrame;
 
 typedef struct Gun
 {
     float coolDown;;
+    int roundsPerMagazine;
     Sound gunSound;
 } Gun;
 
@@ -57,25 +68,22 @@ typedef struct Player {
     bool gunFiring;
     
     // Running animation
-    animationFrame running;
+    AnimationFrame running;
     
     // Gun firing animation
-    animationFrame firing;
+    AnimationFrame firing;
     
     // Gun parameters
     Gun gun;
 } Player;
-
-typedef struct EnvItem {
-    Rectangle rect;
-    int blocking;
-    Color color;
-} EnvItem;
-
 //----------------------------------------------------------------------------------
-// Module Functions Declaration
+// Function Forward Declarations / Prototypes
 //----------------------------------------------------------------------------------
 void UpdatePlayer(Player *player, TmxMap *map, float delta);
+void DrawPlayer(Player *player, PlayerTextures *textures);
+int InitPlayerTextures(PlayerTextures *playerTextures);
+int UnloadPlayerTextures(PlayerTextures *playerTextures);
+int InitPlayer(Player *player, PlayerTextures *textures);
 //------------------------------------------------------------------------------------
 // Program main entry point
 //------------------------------------------------------------------------------------
@@ -91,24 +99,8 @@ int main(void)
     
     InitAudioDevice();
     
-    //Texture2D playerSprite = LoadTexture("plata/data/Sprite-0001.png");
-    Texture2D idle_right = LoadTexture("plata/data/player_idle-right.png");
-    Texture2D idle_left = LoadTexture("plata/data/player_idle-left.png");
-    Texture2D runSheet_right = LoadTexture("plata/data/player_run-right.png");
-    Texture2D runSheet_left = LoadTexture("plata/data/player_run-left.png");
-    Texture2D idle_left_fire = LoadTexture("plata/data/player_idle_left_fire.png");
-    Texture2D idle_right_fire = LoadTexture("plata/data/player_idle_right_fire.png");
-    
-    if(runSheet_left.id == 0 ||
-       runSheet_right.id == 0 ||
-       idle_left.id == 0 ||
-       idle_right.id == 0)
-    {
-        TraceLog(LOG_ERROR, "Failed to load player sprites!");
-        //TraceLog(LOG_INFO, "Working directory: %s", GetWorkingDirectory());
-        return(1);
-    }
-    
+    PlayerTextures playerTextures = {};
+    InitPlayerTextures(&playerTextures);
     
     // Load tilemap
     TmxMap* map = LoadTMX("plata/data/plata.tmx");
@@ -118,32 +110,10 @@ int main(void)
         return(1);
     }
     
-    Player player = { 0 };
-    player.position = { 400, 280 };
-    player.velocityX = 0.0f;
-    player.velocityY = 0.0f;
-    player.width = (float)idle_right.width;
-    player.height = (float)idle_right.height;
-    player.facingRight = true;
-    player.canJump = false;
-    player.inAir = false;
-    player.idle = true;
-    player.gunFiring = false;
+    Player player = {};
+    InitPlayer(&player, &playerTextures);
     
-    player.running.currentFrame = 0;
-    player.running.frameCount = 8;
-    player.running.frameTimer = 0.0f;
-    player.running.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
-    
-    player.firing.currentFrame = 0;
-    player.firing.frameCount = 4;
-    player.firing.frameTimer = 0.0f;
-    player.firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
-    
-    player.gun.coolDown = 0.2f;
-    player.gun.gunSound = LoadSound("plata/data/sounds/pistol-fire.wav");
-    
-    Camera2D camera = { 0 };
+    Camera2D camera = {};
     camera.target = player.position;
     camera.offset = { screenWidth/2.0f, screenHeight/2.0f };
     camera.rotation = 0.0f;
@@ -159,7 +129,6 @@ int main(void)
         //----------------------------------------------------------------------------------
         float deltaTime = GetFrameTime();
         
-        //UpdatePlayer(&player, envItems, envItemsLength, deltaTime);
         UpdatePlayer(&player, map, deltaTime);
         
         camera.target.x = floorf(player.position.x);
@@ -176,95 +145,17 @@ int main(void)
         //AnimateTMX(map);
         DrawTMX(map, &camera, 0, 0, 0, WHITE);
         
-        // Player animations
-        
-        // Shooting gun
-        if(player.gunFiring)
-        {
-            float frameWidth = idle_right_fire.width / player.firing.frameCount;
-            float frameHeight = idle_right_fire.height;
-            
-            Rectangle sourceRec =
-            {
-                player.firing.currentFrame * frameWidth, // x position in runSheet
-                0,                                // y position (only one row, so 0)
-                frameWidth,                       // width of one frame
-                frameHeight                       // height of one frame
-            };
-            
-            Rectangle destRec =
-            {
-                player.position.x - frameWidth / 2,
-                player.position.y - frameHeight,
-                frameWidth,
-                frameHeight
-            };
-            
-            if(player.facingRight)
-            {
-                DrawTexturePro(idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-            else
-            {
-                DrawTexturePro(idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-            
-        }
-        else if(!player.idle)
-        {
-            float frameWidth = runSheet_right.width / player.running.frameCount;
-            float frameHeight = runSheet_right.height;
-            
-            Rectangle sourceRec =
-            {
-                player.running.currentFrame * frameWidth, // x position in runSheet
-                0,                                // y position (only one row, so 0)
-                frameWidth,                       // width of one frame
-                frameHeight                       // height of one frame
-            };
-            
-            Rectangle destRec =
-            {
-                player.position.x - frameWidth / 2,
-                player.position.y - frameHeight,
-                frameWidth,
-                frameHeight
-            };
-            
-            if(player.facingRight)
-            {
-                DrawTexturePro(runSheet_right, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-            else
-            {
-                DrawTexturePro(runSheet_left, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
-            }
-        }
-        else
-        {
-            if(player.facingRight)
-            {
-                DrawTexture(idle_right,
-                            (int)(player.position.x - idle_right.width / 2),
-                            (int)(player.position.y - idle_right.height),
-                            WHITE);
-            }
-            else
-            {
-                DrawTexture(idle_left,
-                            (int)(player.position.x - idle_left.width / 2),
-                            (int)(player.position.y - idle_left.height),
-                            WHITE);
-            }
-        }
+        DrawPlayer(&player, &playerTextures);
         
         EndMode2D();
         
+        // Debug Information
         DrawText(TextFormat("Jumping: %s", player.inAir ? "true" : "false"), 
                  10, 10, 20, RED);
         
         DrawText(TextFormat("Firing: %s", player.gunFiring ? "true" : "false"), 
                  10, 30, 20, RED);
+        
         EndDrawing();
         //----------------------------------------------------------------------------------
     }
@@ -272,10 +163,7 @@ int main(void)
     // De-Initialization
     //--------------------------------------------------------------------------------------
     UnloadTMX(map);
-    UnloadTexture(runSheet_right);
-    UnloadTexture(runSheet_left);
-    UnloadTexture(idle_right);
-    UnloadTexture(idle_left);
+    UnloadPlayerTextures(&playerTextures);
     UnloadSound(player.gun.gunSound);
     CloseAudioDevice();
     CloseWindow();        // Close window and OpenGL context
@@ -545,4 +433,156 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
             }
         }
     }
+}
+
+void
+DrawPlayer(Player *player, PlayerTextures *textures)
+{
+    // Shooting gun
+    if(player->gunFiring)
+    {
+        float frameWidth = textures->idle_right_fire.width / player->firing.frameCount;
+        float frameHeight = textures->idle_right_fire.height;
+        
+        Rectangle sourceRec =
+        {
+            player->firing.currentFrame * frameWidth, // x position in runSheet
+            0,                                // y position (only one row, so 0)
+            frameWidth,                       // width of one frame
+            frameHeight                       // height of one frame
+        };
+        
+        Rectangle destRec =
+        {
+            player->position.x - frameWidth / 2,
+            player->position.y - frameHeight,
+            frameWidth,
+            frameHeight
+        };
+        
+        if(player->facingRight)
+        {
+            DrawTexturePro(textures->idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+        }
+        else
+        {
+            DrawTexturePro(textures->idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+        }
+        
+    }
+    else if(!player->idle)
+    {
+        float frameWidth = textures->run_right.width / player->running.frameCount;
+        float frameHeight = textures->run_right.height;
+        
+        Rectangle sourceRec =
+        {
+            player->running.currentFrame * frameWidth, // x position in runSheet
+            0,                                // y position (only one row, so 0)
+            frameWidth,                       // width of one frame
+            frameHeight                       // height of one frame
+        };
+        
+        Rectangle destRec =
+        {
+            player->position.x - frameWidth / 2,
+            player->position.y - frameHeight,
+            frameWidth,
+            frameHeight
+        };
+        
+        if(player->facingRight)
+        {
+            DrawTexturePro(textures->run_right, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+        }
+        else
+        {
+            DrawTexturePro(textures->run_left, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+        }
+    }
+    else
+    {
+        if(player->facingRight)
+        {
+            DrawTexture(textures->idle_right,
+                        (int)(player->position.x - textures->idle_right.width / 2),
+                        (int)(player->position.y - textures->idle_right.height),
+                        WHITE);
+        }
+        else
+        {
+            DrawTexture(textures->idle_left,
+                        (int)(player->position.x - textures->idle_left.width / 2),
+                        (int)(player->position.y - textures->idle_left.height),
+                        WHITE);
+        }
+    }
+}
+
+int
+InitPlayerTextures(PlayerTextures *playerTextures)
+{
+    playerTextures->idle_right = LoadTexture("plata/data/player_idle-right.png");
+    playerTextures->idle_left = LoadTexture("plata/data/player_idle-left.png");
+    playerTextures->run_right = LoadTexture("plata/data/player_run-right.png");
+    playerTextures->run_left = LoadTexture("plata/data/player_run-left.png");
+    playerTextures->idle_right_fire = LoadTexture("plata/data/player_idle_right_fire.png");
+    playerTextures->idle_left_fire = LoadTexture("plata/data/player_idle_left_fire.png");
+    
+    if(!playerTextures->run_left.id  ||
+       !playerTextures->run_right.id ||
+       !playerTextures->idle_left.id ||
+       !playerTextures->idle_right.id ||
+       !playerTextures->idle_left_fire.id ||
+       !playerTextures->idle_right_fire.id)
+    {
+        TraceLog(LOG_ERROR, "Failed to load player textures!");
+        return(1);
+    }
+    
+    return(0);
+}
+
+int
+UnloadPlayerTextures(PlayerTextures *playerTextures)
+{
+    UnloadTexture(playerTextures->run_right);
+    UnloadTexture(playerTextures->run_left);
+    UnloadTexture(playerTextures->idle_right);
+    UnloadTexture(playerTextures->idle_left);
+    UnloadTexture(playerTextures->idle_right_fire);
+    UnloadTexture(playerTextures->idle_left_fire);
+    
+    return(0);
+}
+
+int
+InitPlayer(Player *player, PlayerTextures *textures)
+{
+    player->position = { 400, 280 };
+    player->velocityX = 0.0f;
+    player->velocityY = 0.0f;
+    player->width = (float)textures->idle_right.width;
+    player->height = (float)textures->idle_right.height;
+    player->facingRight = true;
+    player->canJump = false;
+    player->inAir = false;
+    player->idle = true;
+    player->gunFiring = false;
+    
+    player->running.currentFrame = 0;
+    player->running.frameCount = 8;
+    player->running.frameTimer = 0.0f;
+    player->running.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
+    
+    player->firing.currentFrame = 0;
+    player->firing.frameCount = 4;
+    player->firing.frameTimer = 0.0f;
+    player->firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
+    
+    player->gun.coolDown = 0.2f;
+    player->gun.roundsPerMagazine = 7;
+    player->gun.gunSound = LoadSound("plata/data/sounds/pistol-fire.wav");
+    
+    return(0);
 }
