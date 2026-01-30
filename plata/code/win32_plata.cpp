@@ -18,6 +18,9 @@
 #include "raylib.h"
 #include "raymath.h"
 
+// DON'T include windows.h at all - use this workaround instead:
+//extern "C" __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
+
 extern "C" 
 {
 #include "raytmx.h"
@@ -76,6 +79,7 @@ typedef struct Player {
     // Gun parameters
     Gun gun;
 } Player;
+
 //----------------------------------------------------------------------------------
 // Function Forward Declarations / Prototypes
 //----------------------------------------------------------------------------------
@@ -84,11 +88,13 @@ void DrawPlayer(Player *player, PlayerTextures *textures);
 int InitPlayerTextures(PlayerTextures *playerTextures);
 int UnloadPlayerTextures(PlayerTextures *playerTextures);
 int InitPlayer(Player *player, PlayerTextures *textures);
+
 //------------------------------------------------------------------------------------
 // Program main entry point
 //------------------------------------------------------------------------------------
 int main(void)
 {
+    //OutputDebugStringA("=== REACHED MAIN===\n");
     // Initialization
     //--------------------------------------------------------------------------------------
     const int screenWidth = 1024;
@@ -113,6 +119,7 @@ int main(void)
     Player player = {};
     InitPlayer(&player, &playerTextures);
     
+    
     Camera2D camera = {};
     camera.target = player.position;
     camera.offset = { screenWidth/2.0f, screenHeight/2.0f };
@@ -133,9 +140,11 @@ int main(void)
         
         camera.target.x = floorf(player.position.x);
         camera.target.y = floorf(player.position.y);
+        
         //----------------------------------------------------------------------------------
         // Draw
         //----------------------------------------------------------------------------------
+        
         BeginDrawing();
         
         ClearBackground(LIGHTGRAY);
@@ -157,6 +166,7 @@ int main(void)
                  10, 30, 20, RED);
         
         EndDrawing();
+        
         //----------------------------------------------------------------------------------
     }
     
@@ -562,7 +572,11 @@ InitPlayer(Player *player, PlayerTextures *textures)
     player->position = { 400, 280 };
     player->velocityX = 0.0f;
     player->velocityY = 0.0f;
-    player->width = (float)textures->idle_right.width;
+    
+    // NOTE(trist007): in Aseprite there were about 28 pixels to the right if player was facing right
+    // if player was facing left there were about 18 pixels to the right, I'm going to have to adjust this
+    // in Aseprite at some point
+    player->width = (float)(textures->idle_right.width) - 30;
     player->height = (float)textures->idle_right.height;
     player->facingRight = true;
     player->canJump = false;
