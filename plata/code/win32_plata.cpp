@@ -523,7 +523,7 @@ UpdateBullets(Projectile *projectiles, GameState *gameState, float delta)
             projectiles[i].position.x +=  projectiles[i].velocity.x * delta;
             
             // Despawn if bullet is offscreen
-            if(projectiles[i].position.x < -200 || projectiles[i].position.x > gameState->screenWidth + 200)
+            if(projectiles[i].position.x < -400 || projectiles[i].position.x > gameState->screenWidth + 400)
             {
                 projectiles[i].active = false;
             }
