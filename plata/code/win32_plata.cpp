@@ -69,7 +69,10 @@ typedef enum
 typedef struct Gun
 {
     float coolDown;;
+    int rounds;
     int roundsPerMagazine;
+    bool overHeated;
+    float overHeatTimer;
     
     Sound pistolSounds[PISTOL_SOUND_COUNT];
 } Gun;
@@ -118,6 +121,7 @@ AnimationRectangles GenerateAnimationRectangle(Player *player, AnimationFrame *s
 //------------------------------------------------------------------------------------
 int main(void)
 {
+    // For debugging
     //OutputDebugStringA("=== REACHED MAIN===\n");
     // Initialization
     //--------------------------------------------------------------------------------------
@@ -464,13 +468,55 @@ UpdatePlayerWeapon(Player *player, float delta)
 {
     player->gun.coolDown -= delta;
     
-    // Firing gun
-    if(IsKeyPressed(KEY_BACKSPACE) && player->gun.coolDown <= 0)
+    // Handle overheat
+    if(player->gun.overHeated)
+    {
+        player->gun.overHeatTimer -= delta;
+        if(player->gun.overHeatTimer <= 0)
+        {
+            player->gun.overHeated = false;
+            
+        }
+        
+        // Exit function now if gun is overheated
+        return;
+    }
+    
+    // Rapid fire
+    if(IsKeyDown(KEY_BACKSPACE) && player->gun.coolDown <= 0 && player->gun.rounds > 0)
     {
         player->gunFiring = true;
         player->firing.currentFrame = 0;
         PlaySound(player->gun.pistolSounds[PISTOL_SOUND_FIRE]);
-        player->gun.coolDown = 0.2f;
+        
+        // Lower cool down if holding down fire
+        player->gun.coolDown = 0.1f;
+        player->gun.rounds--;
+        
+        // Check if mag is empty overheat
+        if(player->gun.rounds == 0)
+        {
+            player->gun.overHeated = true;
+            PlaySound(player->gun.pistolSounds[PISTOL_SOUND_STEAM]);
+        }
+        
+    }
+    
+    // Firing gun
+    if(IsKeyPressed(KEY_BACKSPACE) && player->gun.coolDown <= 0)
+    {
+        if(player->gun.rounds > 0)
+        {
+            player->gunFiring = true;
+            player->gun.rounds--;
+            player->firing.currentFrame = 0;
+            PlaySound(player->gun.pistolSounds[PISTOL_SOUND_FIRE]);
+            
+        }
+        else
+        {
+            PlaySound(player->gun.pistolSounds[PISTOL_SOUND_DRYFIRE]);
+        }
         
     }
     
@@ -489,6 +535,13 @@ UpdatePlayerWeapon(Player *player, float delta)
                 player->firing.currentFrame = 0;
             }
         }
+    }
+    
+    // Reloading
+    if(IsKeyPressed(KEY_R) && !player->gun.overHeated)
+    {
+        PlaySound(player->gun.pistolSounds[PISTOL_SOUND_RELOAD]);
+        player->gun.rounds = player->gun.roundsPerMagazine;
     }
 }
 
@@ -644,6 +697,8 @@ InitPlayer(Player *player, PlayerTextures *textures)
     player->firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
     
     player->gun.coolDown = 0.2f;
+    player->gun.overHeatTimer = 2.0f;
+    player->gun.rounds = 7;
     player->gun.roundsPerMagazine = 7;
     player->gun.pistolSounds[PISTOL_SOUND_FIRE] = LoadSound("plata/data/sounds/pistol-fire.wav");
     player->gun.pistolSounds[PISTOL_SOUND_DRYFIRE] = LoadSound("plata/data/sounds/pistol-dry-fire.wav");
