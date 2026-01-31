@@ -57,11 +57,21 @@ typedef struct AnimationFrame
     float frameSpeed;
 } AnimationFrame;
 
+typedef enum
+{
+    PISTOL_SOUND_FIRE = 0,
+    PISTOL_SOUND_DRYFIRE,
+    PISTOL_SOUND_RELOAD,
+    PISTOL_SOUND_STEAM,
+    PISTOL_SOUND_COUNT
+} PistolSoundType;
+
 typedef struct Gun
 {
     float coolDown;;
     int roundsPerMagazine;
-    Sound gunSound;
+    
+    Sound pistolSounds[PISTOL_SOUND_COUNT];
 } Gun;
 
 typedef struct Player {
@@ -98,7 +108,8 @@ static void UpdatePlayerAnimation(Player *player, float delta);
 static void UpdatePlayerWeapon(Player *player, float delta);
 void DrawPlayer(Player *player, PlayerTextures *textures);
 int InitPlayerTextures(PlayerTextures *playerTextures);
-int UnloadPlayerTextures(PlayerTextures *playerTextures);
+void UnloadPlayerTextures(PlayerTextures *playerTextures);
+void UnloadSounds(Gun *pistol);
 int InitPlayer(Player *player, PlayerTextures *textures);
 AnimationRectangles GenerateAnimationRectangle(Player *player, AnimationFrame *sheet, Texture2D *texture);
 
@@ -187,7 +198,7 @@ int main(void)
     //--------------------------------------------------------------------------------------
     UnloadTMX(map);
     UnloadPlayerTextures(&playerTextures);
-    UnloadSound(player.gun.gunSound);
+    UnloadSounds(&player.gun);
     CloseAudioDevice();
     CloseWindow();        // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
@@ -458,7 +469,7 @@ UpdatePlayerWeapon(Player *player, float delta)
     {
         player->gunFiring = true;
         player->firing.currentFrame = 0;
-        PlaySound(player->gun.gunSound);
+        PlaySound(player->gun.pistolSounds[PISTOL_SOUND_FIRE]);
         player->gun.coolDown = 0.2f;
         
     }
@@ -515,26 +526,6 @@ DrawPlayer(Player *player, PlayerTextures *textures)
     if(player->gunFiring)
     {
         AnimationRectangles rectangle = GenerateAnimationRectangle(player, &player->firing, &textures->idle_right_fire);
-        /*
-        float frameWidth = textures->idle_right_fire.width / player->firing.frameCount;
-        float frameHeight = textures->idle_right_fire.height;
-        
-        Rectangle sourceRec =
-        {
-            player->firing.currentFrame * frameWidth, // x position in runSheet
-            0,                                // y position (only one row, so 0)
-            frameWidth,                       // width of one frame
-            frameHeight                       // height of one frame
-        };
-        
-        Rectangle destRec =
-        {
-            player->position.x - frameWidth / 2,
-            player->position.y - frameHeight,
-            frameWidth,
-            frameHeight
-        };
-        */
         
         if(player->facingRight)
         {
@@ -549,26 +540,6 @@ DrawPlayer(Player *player, PlayerTextures *textures)
     else if(!player->idle)
     {
         AnimationRectangles rectangle = GenerateAnimationRectangle(player, &player->running, &textures->run_right);
-        /*
-                float frameWidth = textures->run_right.width / player->running.frameCount;
-                float frameHeight = textures->run_right.height;
-                
-                Rectangle sourceRec =
-                {
-                    player->running.currentFrame * frameWidth, // x position in runSheet
-                    0,                                // y position (only one row, so 0)
-                    frameWidth,                       // width of one frame
-                    frameHeight                       // height of one frame
-                };
-                
-                Rectangle destRec =
-                {
-                    player->position.x - frameWidth / 2,
-                    player->position.y - frameHeight,
-                    frameWidth,
-                    frameHeight
-                };
-                */
         
         if(player->facingRight)
         {
@@ -622,7 +593,7 @@ InitPlayerTextures(PlayerTextures *playerTextures)
     return(0);
 }
 
-int
+void
 UnloadPlayerTextures(PlayerTextures *playerTextures)
 {
     UnloadTexture(playerTextures->run_right);
@@ -631,8 +602,17 @@ UnloadPlayerTextures(PlayerTextures *playerTextures)
     UnloadTexture(playerTextures->idle_left);
     UnloadTexture(playerTextures->idle_right_fire);
     UnloadTexture(playerTextures->idle_left_fire);
-    
-    return(0);
+}
+
+void
+UnloadSounds(Gun *pistol)
+{
+    for(int i = 0;
+        i < PISTOL_SOUND_COUNT;
+        i++)
+    {
+        UnloadSound(pistol->pistolSounds[i]);
+    }
 }
 
 int
@@ -665,7 +645,11 @@ InitPlayer(Player *player, PlayerTextures *textures)
     
     player->gun.coolDown = 0.2f;
     player->gun.roundsPerMagazine = 7;
-    player->gun.gunSound = LoadSound("plata/data/sounds/pistol-fire.wav");
+    player->gun.pistolSounds[PISTOL_SOUND_FIRE] = LoadSound("plata/data/sounds/pistol-fire.wav");
+    player->gun.pistolSounds[PISTOL_SOUND_DRYFIRE] = LoadSound("plata/data/sounds/pistol-dry-fire.wav");
+    player->gun.pistolSounds[PISTOL_SOUND_RELOAD] = LoadSound("plata/data/sounds/pistol-reload.ogg");
+    player->gun.pistolSounds[PISTOL_SOUND_STEAM] = LoadSound("plata/data/sounds/pistol-steam.wav");
+    
     
     return(0);
 }
