@@ -26,13 +26,22 @@ extern "C"
 #include "raytmx.h"
 }
 
-#define Gravity 400
+#define GRAVITY 400
 #define PLAYER_JUMP_SPD 350.0f
 #define PLAYER_HOR_SPD 300.0f
+#define MAX_PROJECTILES 20
+#define PROJECTILE_SPEED 900.0f
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
+typedef struct Projectile
+{
+    Vector2 velocity;
+    Vector2 position;
+    bool active;
+} Projectile;
+
 typedef struct AnimationRectangles
 {
     Rectangle source;
@@ -74,6 +83,10 @@ typedef struct Gun
     bool overHeated;
     float overHeatTimer;
     
+    Projectile bullets[MAX_PROJECTILES];
+    float bulletRadius;
+    float bulletSpeed;
+    
     Sound pistolSounds[PISTOL_SOUND_COUNT];
 } Gun;
 
@@ -99,6 +112,12 @@ typedef struct Player {
     Gun gun;
 } Player;
 
+typedef struct GameState
+{
+    int screenWidth;
+    int screenHeight;
+} GameState;
+
 //----------------------------------------------------------------------------------
 // Function Forward Declarations / Prototypes
 //----------------------------------------------------------------------------------
@@ -109,10 +128,13 @@ static void UpdatePlayerHorizontalCollision(Player *player, TmxObjectGroup *objG
 static void UpdatePlayerVerticalCollision(Player *player, TmxObjectGroup *objGroup, float delta);
 static void UpdatePlayerAnimation(Player *player, float delta);
 static void UpdatePlayerWeapon(Player *player, float delta);
+static void UpdateBullets(Projectile *projectiles, GameState *gameState, float delta);
 void DrawPlayer(Player *player, PlayerTextures *textures);
+void DrawBullets(Projectile *projectiles);
 int InitPlayerTextures(PlayerTextures *playerTextures);
 void UnloadPlayerTextures(PlayerTextures *playerTextures);
 void UnloadSounds(Gun *pistol);
+static void SpawnBullet(Player *player);
 int InitPlayer(Player *player, PlayerTextures *textures);
 AnimationRectangles GenerateAnimationRectangle(Player *player, AnimationFrame *sheet, Texture2D *texture);
 
@@ -125,10 +147,12 @@ int main(void)
     //OutputDebugStringA("=== REACHED MAIN===\n");
     // Initialization
     //--------------------------------------------------------------------------------------
-    const int screenWidth = 1024;
-    const int screenHeight = 768;
     
-    InitWindow(screenWidth, screenHeight, "raylib [core] example - 2d camera platformer");
+    GameState gameState = {};
+    gameState.screenWidth = 1024;
+    gameState.screenHeight = 768;
+    
+    InitWindow(gameState.screenWidth, gameState.screenHeight, "raylib [core] example - 2d camera platformer");
     SetWindowPosition(60, 30);
     
     InitAudioDevice();
@@ -150,7 +174,7 @@ int main(void)
     
     Camera2D camera = {};
     camera.target = player.position;
-    camera.offset = { screenWidth/2.0f, screenHeight/2.0f };
+    camera.offset = { gameState.screenWidth/2.0f, gameState.screenHeight/2.0f };
     camera.rotation = 0.0f;
     camera.zoom = 1.0f;
     
@@ -165,6 +189,7 @@ int main(void)
         float deltaTime = GetFrameTime();
         
         UpdatePlayer(&player, map, deltaTime);
+        UpdateBullets(player.gun.bullets, &gameState, deltaTime);
         
         camera.target.x = floorf(player.position.x);
         camera.target.y = floorf(player.position.y);
@@ -183,6 +208,7 @@ int main(void)
         DrawTMX(map, &camera, 0, 0, 0, WHITE);
         
         DrawPlayer(&player, &playerTextures);
+        DrawBullets(player.gun.bullets);
         
         EndMode2D();
         
@@ -431,7 +457,7 @@ UpdatePlayerVerticalCollision(Player *player, TmxObjectGroup *objGroup, float de
     if(!hitObstacle)
     {
         player->position.y += player->velocityY * delta;
-        player->velocityY += Gravity * delta;
+        player->velocityY += GRAVITY * delta;
         player->canJump = false;
     }
     else
@@ -464,6 +490,48 @@ UpdatePlayerAnimation(Player *player, float delta)
 }
 
 static void
+SpawnBullet(Player *player)
+{
+    for(int i = 0;
+        i < MAX_PROJECTILES;
+        i++)
+    {
+        if(!player->gun.bullets[i].active)
+        {
+            player->gun.bullets[i].active = true;
+            player->gun.bullets[i].position.x = player->position.x;
+            player->gun.bullets[i].position.y = player->position.y - 33;
+            
+            float direction = player->facingRight ? 1.0f : -1.0f;
+            player->gun.bullets[i].velocity.x = direction * player->gun.bulletSpeed;
+            
+            // just fire one bullet
+            break;
+        }
+    }
+}
+
+static void
+UpdateBullets(Projectile *projectiles, GameState *gameState, float delta)
+{
+    for(int i = 0;
+        i < MAX_PROJECTILES;
+        i++)
+    {
+        if(projectiles[i].active)
+        {
+            projectiles[i].position.x +=  projectiles[i].velocity.x * delta;
+            
+            // Despawn if bullet is offscreen
+            if(projectiles[i].position.x < -200 || projectiles[i].position.x > gameState->screenWidth + 200)
+            {
+                projectiles[i].active = false;
+            }
+        }
+    }
+}
+
+static void
 UpdatePlayerWeapon(Player *player, float delta)
 {
     player->gun.coolDown -= delta;
@@ -486,6 +554,7 @@ UpdatePlayerWeapon(Player *player, float delta)
     if(IsKeyDown(KEY_BACKSPACE) && player->gun.coolDown <= 0 && player->gun.rounds > 0)
     {
         player->gunFiring = true;
+        SpawnBullet(player);
         player->firing.currentFrame = 0;
         PlaySound(player->gun.pistolSounds[PISTOL_SOUND_FIRE]);
         
@@ -508,6 +577,7 @@ UpdatePlayerWeapon(Player *player, float delta)
         if(player->gun.rounds > 0)
         {
             player->gunFiring = true;
+            SpawnBullet(player);
             player->gun.rounds--;
             player->firing.currentFrame = 0;
             PlaySound(player->gun.pistolSounds[PISTOL_SOUND_FIRE]);
@@ -570,6 +640,21 @@ GenerateAnimationRectangle(Player *player, AnimationFrame *sheet, Texture2D *tex
     };
     
     return rectangles;
+}
+
+void
+DrawBullets(Projectile *projectiles)
+{
+    for(int i = 0;
+        i < MAX_PROJECTILES;
+        i++)
+    {
+        if(projectiles[i].active)
+        {
+            DrawCircleV(projectiles[i].position, 4.0f, YELLOW);
+            DrawCircleV(projectiles[i].position, 2.0f, RED);
+        }
+    }
 }
 
 void
@@ -672,8 +757,8 @@ int
 InitPlayer(Player *player, PlayerTextures *textures)
 {
     player->position = { 400, 280 };
-    player->velocityX = 0.0f;
-    player->velocityY = 0.0f;
+    //player->velocityX = 0.0f;
+    //player->velocityY = 0.0f;
     
     // NOTE(trist007): in Aseprite there were about 28 pixels to the right if player was facing right
     // if player was facing left there were about 18 pixels to the right, I'm going to have to adjust this
@@ -686,25 +771,34 @@ InitPlayer(Player *player, PlayerTextures *textures)
     player->idle = true;
     player->gunFiring = false;
     
-    player->running.currentFrame = 0;
+    //player->running.currentFrame = 0;
     player->running.frameCount = 8;
-    player->running.frameTimer = 0.0f;
+    //player->running.frameTimer = 0.0f;
     player->running.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
     
-    player->firing.currentFrame = 0;
+    //player->firing.currentFrame = 0;
     player->firing.frameCount = 4;
-    player->firing.frameTimer = 0.0f;
+    //player->firing.frameTimer = 0.0f;
     player->firing.frameSpeed = 0.1f;  // 10 frames per second (1.0/10)
     
     player->gun.coolDown = 0.2f;
     player->gun.overHeatTimer = 2.0f;
     player->gun.rounds = 7;
     player->gun.roundsPerMagazine = 7;
+    player->gun.bulletRadius = 2.0f;
+    player->gun.bulletSpeed = PROJECTILE_SPEED;
     player->gun.pistolSounds[PISTOL_SOUND_FIRE] = LoadSound("plata/data/sounds/pistol-fire.wav");
     player->gun.pistolSounds[PISTOL_SOUND_DRYFIRE] = LoadSound("plata/data/sounds/pistol-dry-fire.wav");
     player->gun.pistolSounds[PISTOL_SOUND_RELOAD] = LoadSound("plata/data/sounds/pistol-reload.ogg");
     player->gun.pistolSounds[PISTOL_SOUND_STEAM] = LoadSound("plata/data/sounds/pistol-steam.wav");
     
+    
+    for(int i = 0;
+        i < MAX_PROJECTILES;
+        i++)
+    {
+        player->gun.bullets[i].active = false;
+    }
     
     return(0);
 }
