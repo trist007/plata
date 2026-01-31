@@ -33,6 +33,12 @@ extern "C"
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
+typedef struct AnimationRectangles
+{
+    Rectangle source;
+    Rectangle destination;
+} AnimationRectangles;
+
 typedef struct PlayerTextures
 {
     Texture2D idle_right;
@@ -94,6 +100,7 @@ void DrawPlayer(Player *player, PlayerTextures *textures);
 int InitPlayerTextures(PlayerTextures *playerTextures);
 int UnloadPlayerTextures(PlayerTextures *playerTextures);
 int InitPlayer(Player *player, PlayerTextures *textures);
+AnimationRectangles GenerateAnimationRectangle(Player *player, AnimationFrame *sheet, Texture2D *texture);
 
 //------------------------------------------------------------------------------------
 // Program main entry point
@@ -474,12 +481,41 @@ UpdatePlayerWeapon(Player *player, float delta)
     }
 }
 
+AnimationRectangles
+GenerateAnimationRectangle(Player *player, AnimationFrame *sheet, Texture2D *texture)
+{
+    float frameWidth = texture->width / sheet->frameCount; 
+    float frameHeight = texture->height;
+    
+    AnimationRectangles rectangles;
+    
+    rectangles.source =
+    {
+        sheet->currentFrame * frameWidth,
+        0,
+        frameWidth,
+        frameHeight
+    };
+    
+    rectangles.destination =
+    {
+        player->position.x - frameWidth / 2,
+        player->position.y - frameHeight,
+        frameWidth,
+        frameHeight
+    };
+    
+    return rectangles;
+}
+
 void
 DrawPlayer(Player *player, PlayerTextures *textures)
 {
     // Shooting gun
     if(player->gunFiring)
     {
+        AnimationRectangles rectangle = GenerateAnimationRectangle(player, &player->firing, &textures->idle_right_fire);
+        /*
         float frameWidth = textures->idle_right_fire.width / player->firing.frameCount;
         float frameHeight = textures->idle_right_fire.height;
         
@@ -498,45 +534,49 @@ DrawPlayer(Player *player, PlayerTextures *textures)
             frameWidth,
             frameHeight
         };
+        */
         
         if(player->facingRight)
         {
-            DrawTexturePro(textures->idle_right_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            DrawTexturePro(textures->idle_right_fire, rectangle.source, rectangle.destination, {0, 0}, 0.0f, WHITE);
         }
         else
         {
-            DrawTexturePro(textures->idle_left_fire, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            DrawTexturePro(textures->idle_left_fire, rectangle.source, rectangle.destination, {0, 0}, 0.0f, WHITE);
         }
         
     }
     else if(!player->idle)
     {
-        float frameWidth = textures->run_right.width / player->running.frameCount;
-        float frameHeight = textures->run_right.height;
-        
-        Rectangle sourceRec =
-        {
-            player->running.currentFrame * frameWidth, // x position in runSheet
-            0,                                // y position (only one row, so 0)
-            frameWidth,                       // width of one frame
-            frameHeight                       // height of one frame
-        };
-        
-        Rectangle destRec =
-        {
-            player->position.x - frameWidth / 2,
-            player->position.y - frameHeight,
-            frameWidth,
-            frameHeight
-        };
+        AnimationRectangles rectangle = GenerateAnimationRectangle(player, &player->running, &textures->run_right);
+        /*
+                float frameWidth = textures->run_right.width / player->running.frameCount;
+                float frameHeight = textures->run_right.height;
+                
+                Rectangle sourceRec =
+                {
+                    player->running.currentFrame * frameWidth, // x position in runSheet
+                    0,                                // y position (only one row, so 0)
+                    frameWidth,                       // width of one frame
+                    frameHeight                       // height of one frame
+                };
+                
+                Rectangle destRec =
+                {
+                    player->position.x - frameWidth / 2,
+                    player->position.y - frameHeight,
+                    frameWidth,
+                    frameHeight
+                };
+                */
         
         if(player->facingRight)
         {
-            DrawTexturePro(textures->run_right, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            DrawTexturePro(textures->run_right, rectangle.source, rectangle.destination, {0, 0}, 0.0f, WHITE);
         }
         else
         {
-            DrawTexturePro(textures->run_left, sourceRec, destRec, {0, 0}, 0.0f, WHITE);
+            DrawTexturePro(textures->run_left, rectangle.source, rectangle.destination, {0, 0}, 0.0f, WHITE);
         }
     }
     else
