@@ -84,6 +84,12 @@ typedef struct Player {
 // Function Forward Declarations / Prototypes
 //----------------------------------------------------------------------------------
 void UpdatePlayer(Player *player, TmxMap *map, float delta);
+static TmxObjectGroup *GetCollisionLayer(TmxMap *map);
+static void UpdatePlayerMovement(Player *player, float delta);
+static void UpdatePlayerHorizontalCollision(Player *player, TmxObjectGroup *objGroup, float delta);
+static void UpdatePlayerVerticalCollision(Player *player, TmxObjectGroup *objGroup, float delta);
+static void UpdatePlayerAnimation(Player *player, float delta);
+static void UpdatePlayerWeapon(Player *player, float delta);
 void DrawPlayer(Player *player, PlayerTextures *textures);
 int InitPlayerTextures(PlayerTextures *playerTextures);
 int UnloadPlayerTextures(PlayerTextures *playerTextures);
@@ -185,8 +191,19 @@ int main(void)
 void
 UpdatePlayer(Player *player, TmxMap *map, float delta)
 {
-    // Find the collision layer
-    TmxLayer *collisionLayer = 0;
+    TmxObjectGroup *collisionGroup = GetCollisionLayer(map);
+    if(!collisionGroup) return;
+    
+    UpdatePlayerMovement(player, delta);
+    UpdatePlayerHorizontalCollision(player, collisionGroup, delta);
+    UpdatePlayerVerticalCollision(player, collisionGroup, delta);
+    UpdatePlayerAnimation(player, delta);
+    UpdatePlayerWeapon(player, delta);
+}
+
+static TmxObjectGroup*
+GetCollisionLayer(TmxMap *map)
+{
     for(uint32_t i = 0;
         i < map->layersLength;
         i++)
@@ -194,19 +211,17 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         if(map->layers[i].type == LAYER_TYPE_OBJECT_GROUP &&
            TextIsEqual(map->layers[i].name, "Collision"))
         {
-            collisionLayer = &map->layers[i];
-            break;
+            return &map->layers[i].exact.objectGroup;
         }
     }
     
-    if(collisionLayer == 0)
-    {
-        TraceLog(LOG_ERROR, "Could not locate Object Layer");
-        return;
-    }
-    
-    TmxObjectGroup *objGroup = &collisionLayer->exact.objectGroup;
-    
+    TraceLog(LOG_ERROR, "Could not locate Collision layer");
+    return(0);
+}
+
+static void
+UpdatePlayerMovement(Player *player, float delta)
+{
     // Movement
     float acceleration = 1000.0f;
     float deceleration = 600.0f;
@@ -224,30 +239,47 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         player->facingRight = true;
     }
     
+    // Apply acceleration and deceleration
     if(inputX != 0.0f)
     {
-        // Acceleration
         player->velocityX += inputX * acceleration * delta;
         
-        // Max speed
-        if(player->velocityX > max_speed) player->velocityX = max_speed;
-        if(player->velocityX < -max_speed) player->velocityX = -max_speed;
+        // Clamp to max speed
+        player->velocityX = Clamp(player->velocityX, -max_speed, max_speed);
     }
-    else
+    else if(!player->inAir)
     {
-        // Deceleration
-        if(player->velocityX > 0 && !player->inAir)
+        float decelerateAmount = deceleration * delta;
+        
+        if(player->velocityX > 0)
         {
-            player->velocityX -= deceleration * delta;
+            player->velocityX -= decelerateAmount;
             if(player->velocityX < 0) player->velocityX = 0;
         }
-        else if(player->velocityX < 0 && !player->inAir)
+        else if(player->velocityX < 0)
         {
-            player->velocityX += deceleration * delta;
+            player->velocityX += decelerateAmount;
             if(player->velocityX > 0) player->velocityX = 0;
         }
     }
     
+    // Jumping
+    if(IsKeyPressed(KEY_SPACE) && player->canJump)
+    {
+        player->velocityY = -PLAYER_JUMP_SPD;
+        player->canJump = false;
+        player->inAir = true;
+    }
+    
+    if(IsKeyReleased(KEY_SPACE) && player->velocityY < 0)
+    {
+        player->velocityY *= 0.5f;
+    }
+}
+
+static void
+UpdatePlayerHorizontalCollision(Player *player, TmxObjectGroup *objGroup, float delta)
+{
     float moveX = player->velocityX * delta;
     
     // Player hitbox
@@ -259,7 +291,6 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     float futureLeft = playerLeft + moveX;
     float futureRight = playerRight + moveX;
     
-    // Collisions
     for(uint32_t i = 0;
         i < objGroup->objectsLength;
         i++)
@@ -293,29 +324,19 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
     }
     
     player->position.x += moveX;
-    
-    // Jumping
-    if(IsKeyPressed(KEY_SPACE) && player->canJump)
-    {
-        player->velocityY = -PLAYER_JUMP_SPD;
-        player->canJump = false;
-        player->inAir = true;
-    }
-    
-    if(IsKeyReleased(KEY_SPACE) && player->velocityY < 0)
-    {
-        player->velocityY *= 0.5f;
-    }
-    
-    // Vertical movement
+}
+
+static void
+UpdatePlayerVerticalCollision(Player *player, TmxObjectGroup *objGroup, float delta)
+{
     bool hitObstacle = false;
     float futureY = player->position.y + player->velocityY * delta;
     
     // Recalculate player bounds after horizontal movement
-    playerLeft = player->position.x - player->width / 2;
-    playerRight = player->position.x + player->width / 2;
-    playerTop = player->position.y - player->height;
-    playerBottom = player->position.y;
+    float playerLeft = player->position.x - player->width / 2;
+    float playerRight = player->position.x + player->width / 2;
+    float playerTop = player->position.y - player->height;
+    float playerBottom = player->position.y;
     
     for(uint32_t i = 0;
         i < objGroup->objectsLength;
@@ -332,7 +353,7 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         // Check if player overlaps horizontally
         if(playerRight > platformLeft && playerLeft < platformRight)
         {
-            // Falling onto platform
+            // Landing on platform
             if(player->velocityY >= 0 &&
                playerBottom <= platformTop + 1.0f &&
                futureY >= platformTop - 1.0f)
@@ -343,7 +364,7 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
                 break;
             }
             
-            // Jumping into ceiling
+            // Hitting ceiling
             float futureTop = futureY - player->height;
             if(player->velocityY < 0 &&
                playerTop >= platformBottom &&
@@ -396,8 +417,11 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
         player->canJump = true;
         player->inAir = false;
     }
-    
-    // Animation when idle and when running
+}
+
+static void
+UpdatePlayerAnimation(Player *player, float delta)
+{
     if(!player->inAir && player->velocityX != 0)
     {
         player->idle = false;
@@ -407,14 +431,19 @@ UpdatePlayer(Player *player, TmxMap *map, float delta)
             player->running.frameTimer = 0.0f;
             player->running.currentFrame++;
             
-            if(player->running.currentFrame >= player->running.frameCount) player->running.currentFrame = 0;
+            if(player->running.currentFrame >= player->running.frameCount)
+                player->running.currentFrame = 0;
         }
     }
     else
     {
         player->idle = true;
     }
-    
+}
+
+static void
+UpdatePlayerWeapon(Player *player, float delta)
+{
     player->gun.coolDown -= delta;
     
     // Firing gun
